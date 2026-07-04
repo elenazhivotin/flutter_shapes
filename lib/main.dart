@@ -1,0 +1,637 @@
+import 'package:flutter/material.dart';
+import 'dart:math';
+import 'package:flutter_shapes/contourGenerator.dart';
+
+void main() {
+  runApp(const MyApp());
+}
+
+class MyApp extends StatelessWidget {
+  const MyApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return const MaterialApp(
+      home: ShapeCanvasPage(),
+    );
+  }
+}
+
+// ---------------- MODEL ----------------
+
+enum ShapeType { circle, square, triangle, rightTriangle, leftTriangle }
+
+class ShapeItem {
+  ShapeType type;
+  Offset position;
+
+  ShapeItem({required this.type, required this.position});
+}
+
+// ---------------- PAGE ----------------
+
+class ShapeCanvasPage extends StatefulWidget {
+  const ShapeCanvasPage({super.key});
+
+  @override
+  State<ShapeCanvasPage> createState() => _ShapeCanvasPageState();
+}
+
+class _ShapeCanvasPageState extends State<ShapeCanvasPage> {
+  final List<ShapeItem> shapes = [];
+  List<PlacedShape>? contourShapes;  // For LevelContourPainter
+
+  Contour? contour;
+  bool isDrawing = false;
+  String statusText = "Tap on the canvas to add contour points. Double tap to close the contour.";
+
+  bool isInsideContour(Offset point) {
+    if (contour == null || !contour!.isClosed) return true;
+
+    return contour!.containsPoint(point);
+  }
+
+  Offset _nextShapePosition() {
+    if (contour != null && contour!.isClosed) {
+      final candidates = <Offset>[
+        Offset(contour!.boundingBox.left + 40, contour!.boundingBox.top + 40),
+        Offset(contour!.boundingBox.center.dx, contour!.boundingBox.top + 60),
+        Offset(contour!.boundingBox.left + 60, contour!.boundingBox.center.dy),
+        Offset(contour!.boundingBox.center.dx, contour!.boundingBox.center.dy),
+      ];
+
+      for (final candidate in candidates) {
+        if (contour!.containsPoint(candidate)) {
+          return candidate;
+        }
+      }
+    }
+
+    return Offset(60 + shapes.length * 18, 110 + (shapes.length % 4) * 18);
+  }
+
+  void addShape(ShapeType type) {
+    final position = _nextShapePosition();
+
+    setState(() {
+      shapes.add(
+        ShapeItem(type: type, position: position),
+      );
+    });
+  }
+
+  void startContourDrawing() {
+    setState(() {
+      isDrawing = true;
+      contour = Contour(points: []);
+      statusText = 'Contour drawing active';
+    });
+  }
+
+  void addContourPoint(Offset point) {
+    if (!isDrawing || contour == null) return;
+
+    setState(() {
+      contour!.points.add(point);
+      statusText = contour!.points.length == 1
+          ? 'Contour point added. Tap again to continue.'
+          : 'Contour point added';
+    });
+  }
+
+  void closeContour() {
+    if (contour == null || contour!.points.length < 3) return;
+
+    setState(() {
+      contour!.isClosed = true;
+      isDrawing = false;
+      statusText = 'Contour closed. Add shapes inside it.';
+    });
+  }
+
+  void clearCanvas() {
+  showDialog(
+    context: context,
+    builder: (_) => AlertDialog(
+      title: const Text("Clear canvas?"),
+      content: const Text("This will remove all shapes and contour."),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text("Cancel"),
+        ),
+        TextButton(
+          onPressed: () {
+            Navigator.pop(context);
+            setState(() {
+              shapes.clear();
+              contourShapes = null;
+              contour = null;
+              isDrawing = false;
+              statusText = 'Canvas cleared';
+            });
+          },
+          child: const Text("Clear"),
+        ),
+      ],
+    ),
+  );
+  }
+
+  void addCountourTemplate() {
+    final generator = ContourGenerator();
+    final randomCount = Random().nextInt(6) + 5;  // Random between 5-10
+    final randomShapes = generator.generateLevel(randomCount);
+    
+    setState(() {
+      shapes.clear();
+      contourShapes = randomShapes;  // Use LevelContourPainter to paint these as contour
+      contour = null;
+      isDrawing = false;
+      statusText = 'Random contour generated using LevelContourPainter';
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text("Canvas Shapes")),
+      body: Column(
+        children: [
+          // 🔝 TOP TOOLBAR
+          Container(
+            height: 80,
+            color: Colors.grey[200],
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              // children: [
+              //   shapeButton(Icons.circle, () => addShape(ShapeType.circle)),
+              //   shapeButton(Icons.crop_square, () => addShape(ShapeType.square)),
+              //   shapeButton(Icons.change_history,
+              //       () => addShape(ShapeType.triangle)),
+              //   shapeButton(Icons.south_east,
+              //       () => addShape(ShapeType.rightTriangle)),
+
+              // ],
+              children: [
+  // Стандартные фигуры через иконки
+  shapeButton(
+    const Icon(Icons.circle, size: 24), 
+    () => addShape(ShapeType.circle),
+  ),
+  shapeButton(
+    const Icon(Icons.crop_square, size: 24), 
+    () => addShape(ShapeType.square),
+  ),
+  shapeButton(
+    const Icon(Icons.change_history, size: 24), 
+    () => addShape(ShapeType.triangle),
+  ),
+  
+  shapeButton(
+    CustomPaint(
+      size: const Size(24, 24),
+      painter: UniversalTrianglePainter(
+        orientation: TriangleOrientation.bottomLeft,
+        fillColor: Colors.transparent, // Прозрачный внутри, как иконка
+        strokeColor: Colors.black,     // Цвет контура иконки
+        strokeWidth: 2.0,
+      ),
+    ),
+    () => addShape(ShapeType.leftTriangle),
+  ),
+  
+   shapeButton(
+    CustomPaint(
+      size: const Size(24, 24),
+      painter: UniversalTrianglePainter(
+        orientation: TriangleOrientation.bottomRight,
+        fillColor: Colors.transparent, 
+        strokeColor: Colors.black,     
+        strokeWidth: 2.0,
+      ),
+    ),
+    () => addShape(ShapeType.rightTriangle),
+  ),
+],
+            ),
+          ),
+          Row(children: [
+            ElevatedButton(
+              onPressed: startContourDrawing,
+              child: Text(isDrawing ? 'Contour Drawing' : 'Draw Contour'),
+            ),
+            const SizedBox(width: 12),
+            ElevatedButton(
+              onPressed: clearCanvas,
+              child: const Text("Clear"),
+            ),
+            const SizedBox(width: 12),
+            ElevatedButton(
+              onPressed: addCountourTemplate,
+              child: const Text("Draw Template"),
+            ),
+          ],),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+            child: Text(
+              statusText,
+              style: const TextStyle(fontSize: 12),
+            ),
+          ),
+          
+
+          // 🎨 CANVAS
+          Expanded(
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTapUp: (details) {
+                addContourPoint(details.localPosition);
+              },
+              onDoubleTap: () {
+                closeContour();
+              },
+              child: Stack(
+                children: [
+                  // ✅ DRAW CONTOUR using LevelContourPainter (if using template)
+                  if (contourShapes != null)
+                    IgnorePointer(
+                      child: CustomPaint(
+                        size: Size.infinite,
+                        painter: LevelContourPainter(contourShapes!),
+                      ),
+                    ),
+
+                  // ✅ DRAW CONTOUR (if using old manual system)
+                  if (contour != null && contourShapes == null)
+                    IgnorePointer(
+                      child: CustomPaint(
+                        size: Size.infinite,
+                        painter: ContourPainter(contour!),
+                      ),
+                    ),
+
+                  // 👇 shapes interactive
+                  ...shapes.map((shape) {
+                    return Positioned(
+                      left: shape.position.dx,
+                      top: shape.position.dy,
+                      child: DraggableShape(
+                        shape: shape,
+                        onDrag: (offset) {
+                          setState(() {
+                            shape.position = offset;
+                          });
+                        },
+                        isInsideContour: isInsideContour,
+                      ),
+                    );
+                  }),
+                ],
+              ),
+            ),
+          )
+        ],
+      ),
+    );
+  }
+
+  // Widget shapeButton(IconData icon, VoidCallback onTap) {
+  //   return GestureDetector(
+  //     onTap: onTap,
+  //     child: Icon(icon, size: 40),
+  //   );
+  // }
+
+  Widget shapeButton(Widget iconWidget, VoidCallback onTap) {
+    return IconButton(
+      icon: iconWidget,
+      onPressed: onTap,
+    );
+  }
+
+}
+
+// ---------------- DRAGGABLE SHAPE ----------------
+
+class DraggableShape extends StatefulWidget {
+  final ShapeItem shape;
+  final Function(Offset) onDrag;
+  final bool Function(Offset) isInsideContour;
+
+  const DraggableShape({
+    super.key,
+    required this.shape,
+    required this.onDrag,
+    required this.isInsideContour,
+  });
+
+  @override
+  State<DraggableShape> createState() => _DraggableShapeState();
+}
+
+class _DraggableShapeState extends State<DraggableShape> {
+  Offset localOffset = Offset.zero;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onPanUpdate: (details) {
+        final newOffset = Offset(
+          widget.shape.position.dx + details.delta.dx,
+          widget.shape.position.dy + details.delta.dy,
+        );
+
+        if (widget.isInsideContour(newOffset)) {
+          widget.onDrag(newOffset);
+        }
+      },
+      child: buildShape(widget.shape.type),
+    );
+  }
+
+  Widget buildShape(ShapeType type) {
+    const double strokeWidth = 2.0;
+    const Color strokeColor = Colors.black;
+
+    switch (type) {
+      case ShapeType.circle:
+        return Container(
+          width: 90,
+          height: 90,
+          decoration: const BoxDecoration(
+            color: Colors.blue,
+            shape: BoxShape.circle,
+            // add border
+            border: Border.fromBorderSide(
+              BorderSide(color: strokeColor, width: strokeWidth),
+            ),
+          ),        
+        );
+
+      case ShapeType.square:
+        return Container(
+          width: 90,
+          height: 90,
+          decoration: const BoxDecoration(
+            color: Colors.red,
+            border: Border.fromBorderSide(
+              BorderSide(color: strokeColor, width: strokeWidth),
+            ),
+          ),       
+        );
+
+      case ShapeType.triangle:
+        return CustomPaint(
+          size: const Size(90, 90),
+          painter: TrianglePainter(),
+        );
+
+      case ShapeType.rightTriangle:
+        return CustomPaint(
+          size: const Size(90, 90),
+          painter: UniversalTrianglePainter(
+            orientation: TriangleOrientation.bottomRight,
+            fillColor: Colors.yellow,
+            strokeColor: strokeColor,
+            strokeWidth: strokeWidth,
+          ),
+      );
+
+      case ShapeType.leftTriangle:
+        return CustomPaint(
+        size: const Size(90, 90),
+        painter: UniversalTrianglePainter(
+          orientation: TriangleOrientation.bottomLeft,
+          fillColor: Colors.orange,
+          strokeColor: strokeColor,
+          strokeWidth: strokeWidth,
+        ),
+      );
+    }
+  }
+}
+
+// 🔺 TRIANGLE PAINTER
+
+class TrianglePainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()..color = Colors.green;
+
+    final path = Path()
+      ..moveTo(size.width / 2, 0)
+      ..lineTo(0, size.height)
+      ..lineTo(size.width, size.height)
+      ..close();
+
+    canvas.drawPath(path, paint);
+
+    final strokePaint = Paint()
+      ..color = Colors.black
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.0;
+
+    canvas.drawPath(path, strokePaint);
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+class RightTrianglePainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final path = Path()
+      ..moveTo(0, 0)
+      ..lineTo(size.width, size.height)
+      ..lineTo(0, size.height)
+      ..close();
+
+    final fillPaint = Paint()
+      ..color = Colors.yellow
+      ..style = PaintingStyle.fill;
+
+    canvas.drawPath(path, fillPaint);
+
+    final strokePaint = Paint()
+      ..color = Colors.black
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.0;
+
+    canvas.drawPath(path, strokePaint);
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+class UniversalTrianglePainter extends CustomPainter {
+  final TriangleOrientation orientation;
+  final Color fillColor;
+  final Color strokeColor;
+  final double strokeWidth;
+
+  UniversalTrianglePainter({
+    required this.orientation,
+    this.fillColor = Colors.yellow,
+    this.strokeColor = Colors.black,
+    this.strokeWidth = 2.0,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final path = Path();
+
+    // pathes for all 4 oprtions of triangle orientation
+    switch (orientation) {
+      case TriangleOrientation.topLeft: // (◤)
+        path
+          ..moveTo(0, 0)
+          ..lineTo(size.width, 0)
+          ..lineTo(0, size.height)
+          ..close();
+        break;
+
+      case TriangleOrientation.bottomLeft: // (◣)
+        path
+          ..moveTo(0, 0)
+          ..lineTo(0, size.height)
+          ..lineTo(size.width, size.height)
+          ..close();
+        break;
+
+      case TriangleOrientation.topRight: // (◥)
+        path
+          ..moveTo(0, 0)
+          ..lineTo(size.width, 0)
+          ..lineTo(size.width, size.height)
+          ..close();
+        break;
+
+      case TriangleOrientation.bottomRight: // (◢)
+        path
+          ..moveTo(0, size.height)
+          ..lineTo(size.width, size.height)
+          ..lineTo(size.width, 0)
+          ..close();
+        break;
+    }
+
+    final fillPaint = Paint()
+      ..color = fillColor
+      ..style = PaintingStyle.fill;
+    canvas.drawPath(path, fillPaint);
+
+    final strokePaint = Paint()
+      ..color = strokeColor
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = strokeWidth;
+      //..strokeJoin = StrokeJoin.round; // Сглаживает острые углы контура
+
+    canvas.drawPath(path, strokePaint);
+  }
+
+  // only if any of the properties change, we need to repaint
+  @override
+  bool shouldRepaint(covariant UniversalTrianglePainter oldDelegate) {
+    return oldDelegate.orientation != orientation ||
+        oldDelegate.fillColor != fillColor ||
+        oldDelegate.strokeColor != strokeColor ||
+        oldDelegate.strokeWidth != strokeWidth;
+  }
+}
+
+class Contour {
+  final List<Offset> points;
+  bool isClosed;
+
+  Contour({required this.points, this.isClosed = false});
+
+  Rect get boundingBox {
+    if (points.isEmpty) {
+      return Rect.fromLTWH(0, 0, 0, 0);
+    }
+
+    final left = points.map((p) => p.dx).reduce((a, b) => a < b ? a : b);
+    final top = points.map((p) => p.dy).reduce((a, b) => a < b ? a : b);
+    final right = points.map((p) => p.dx).reduce((a, b) => a > b ? a : b);
+    final bottom = points.map((p) => p.dy).reduce((a, b) => a > b ? a : b);
+
+    return Rect.fromLTRB(left, top, right, bottom);
+  }
+
+  bool containsPoint(Offset point) {
+    if (!isClosed || points.length < 3) return true;
+
+    int intersections = 0;
+
+    for (int i = 0; i < points.length; i++) {
+      final a = points[i];
+      final b = points[(i + 1) % points.length];
+
+      if (((a.dy > point.dy) != (b.dy > point.dy)) &&
+          (point.dx <
+              (b.dx - a.dx) *
+                      (point.dy - a.dy) /
+                      (b.dy - a.dy) +
+                  a.dx)) {
+        intersections++;
+      }
+    }
+
+    return intersections % 2 == 1;
+  }
+}
+
+class ContourPainter extends CustomPainter {
+  final Contour contour;
+
+  ContourPainter(this.contour);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = Colors.black
+      ..strokeWidth = 2
+      ..style = PaintingStyle.stroke;
+
+    final fillPaint = Paint()
+      ..color = Colors.blue.withValues(alpha: 0.2)
+      ..style = PaintingStyle.fill;
+
+    final path = Path();
+
+    if (contour.points.isEmpty) return;
+
+    path.moveTo(contour.points.first.dx, contour.points.first.dy);
+
+    for (var p in contour.points.skip(1)) {
+      path.lineTo(p.dx, p.dy);
+    }
+
+    if (contour.isClosed) {
+      path.close();
+      canvas.drawPath(path, fillPaint);
+    }
+
+    canvas.drawPath(path, paint);
+
+    // draw points
+    for (var p in contour.points) {
+      canvas.drawCircle(p, 4, Paint()..color = Colors.red);
+    }
+    
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
+}
+
+enum TriangleOrientation {
+  topLeft,
+  bottomLeft,
+  topRight,
+  bottomRight,
+}
+
