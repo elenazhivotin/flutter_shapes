@@ -19,13 +19,116 @@ class MyApp extends StatelessWidget {
 
 // ---------------- MODEL ----------------
 
-enum ShapeType { circle, square, triangle, rightTriangle, leftTriangle }
+enum ShapeType { circle, square, triangle, rightTriangle, leftTriangle, topLeftTriangle, topRightTriangle }
 
 class ShapeItem {
   ShapeType type;
   Offset position;
 
   ShapeItem({required this.type, required this.position});
+}
+
+Offset snapShapePositionToContour(
+  Offset position,
+  List<PlacedShape>? contourShapes, {
+  double shapeSize = 90.0,
+  double snapDistance = 5.0,
+  Contour? contour,
+}) {
+  if (contourShapes == null || contourShapes.isEmpty) {
+    if (contour == null || !contour.isClosed || contour.points.length < 3) {
+      return position;
+    }
+  }
+
+  final shapeRect = Rect.fromLTWH(position.dx, position.dy, shapeSize, shapeSize);
+  double bestDistance = double.infinity;
+  Offset snappedPosition = position;
+
+  if (contour != null && contour.isClosed && contour.points.length >= 3) {
+    final contourPoints = contour.points;
+    for (int i = 0; i < contourPoints.length; i++) {
+      final a = contourPoints[i];
+      final b = contourPoints[(i + 1) % contourPoints.length];
+      final edge = b - a;
+      final edgeLength = edge.distance;
+
+      if (edgeLength == 0) {
+        continue;
+      }
+
+      final t = ((shapeRect.center.dx - a.dx) * edge.dx + (shapeRect.center.dy - a.dy) * edge.dy) /
+          (edgeLength * edgeLength);
+      final clampedT = t.clamp(0.0, 1.0);
+      final projection = a + edge * clampedT;
+      final distance = (shapeRect.center - projection).distance;
+
+      if (distance <= snapDistance) {
+        final dx = projection.dx - shapeRect.center.dx;
+        final dy = projection.dy - shapeRect.center.dy;
+
+        final snapped = Offset(position.dx + dx, position.dy + dy);
+        if (distance < bestDistance) {
+          bestDistance = distance;
+          snappedPosition = snapped;
+        }
+      }
+    }
+  }
+
+  if (contourShapes != null && contourShapes.isNotEmpty) {
+    for (final contourShape in contourShapes) {
+      final contourRect = Rect.fromLTWH(
+        contourShape.gridX * shapeSize,
+        contourShape.gridY * shapeSize,
+        shapeSize,
+        shapeSize,
+      );
+
+      final candidates = <({double distance, Offset position})>[
+        (
+          distance: (shapeRect.right - contourRect.left).abs(),
+          position: Offset(contourRect.left - shapeSize, shapeRect.top),
+        ),
+        (
+          distance: (shapeRect.left - contourRect.right).abs(),
+          position: Offset(contourRect.right, shapeRect.top),
+        ),
+        (
+          distance: (shapeRect.bottom - contourRect.top).abs(),
+          position: Offset(shapeRect.left, contourRect.top - shapeSize),
+        ),
+        (
+          distance: (shapeRect.top - contourRect.bottom).abs(),
+          position: Offset(shapeRect.left, contourRect.bottom),
+        ),
+      ];
+
+      for (final candidate in candidates) {
+        if (candidate.distance <= snapDistance) {
+          debugPrint(
+            'Contour snap candidate: shape=(${position.dx.toStringAsFixed(1)}, ${position.dy.toStringAsFixed(1)}) '
+            'contour=(${contourRect.left.toStringAsFixed(1)}, ${contourRect.top.toStringAsFixed(1)}) '
+            'distance=${candidate.distance.toStringAsFixed(2)} -> ${candidate.position.dx.toStringAsFixed(1)}, ${candidate.position.dy.toStringAsFixed(1)}',
+          );
+        }
+
+        if (candidate.distance <= snapDistance && candidate.distance < bestDistance) {
+          bestDistance = candidate.distance;
+          snappedPosition = candidate.position;
+        }
+      }
+    }
+  }
+
+  if (bestDistance <= snapDistance) {
+    debugPrint(
+      'Contour snapped: from (${position.dx.toStringAsFixed(1)}, ${position.dy.toStringAsFixed(1)}) '
+      'to (${snappedPosition.dx.toStringAsFixed(1)}, ${snappedPosition.dy.toStringAsFixed(1)})',
+    );
+  }
+
+  return snappedPosition;
 }
 
 // ---------------- PAGE ----------------
@@ -213,6 +316,32 @@ class _ShapeCanvasPageState extends State<ShapeCanvasPage> {
     ),
     () => addShape(ShapeType.rightTriangle),
   ),
+
+  shapeButton(
+    CustomPaint(
+      size: const Size(24, 24),
+      painter: UniversalTrianglePainter(
+        orientation: TriangleOrientation.topRight,
+        fillColor: Colors.transparent, 
+        strokeColor: Colors.black,     
+        strokeWidth: 2.0,
+      ),
+    ),
+    () => addShape(ShapeType.topRightTriangle),
+  ),
+
+  shapeButton(
+    CustomPaint(
+      size: const Size(24, 24),
+      painter: UniversalTrianglePainter(
+        orientation: TriangleOrientation.topLeft,
+        fillColor: Colors.transparent, 
+        strokeColor: Colors.black,     
+        strokeWidth: 2.0,
+      ),
+    ),
+    () => addShape(ShapeType.topLeftTriangle),
+  ),
 ],
             ),
           ),
@@ -273,18 +402,16 @@ class _ShapeCanvasPageState extends State<ShapeCanvasPage> {
 
                   // 👇 shapes interactive
                   ...shapes.map((shape) {
-                    return Positioned(
-                      left: shape.position.dx,
-                      top: shape.position.dy,
-                      child: DraggableShape(
-                        shape: shape,
-                        onDrag: (offset) {
-                          setState(() {
-                            shape.position = offset;
-                          });
-                        },
-                        isInsideContour: isInsideContour,
-                      ),
+                    return DraggableShape(
+                      shape: shape,
+                      contourShapes: contourShapes,
+                      contour: contour,
+                      onDrag: (offset) {
+                        setState(() {
+                          shape.position = offset;
+                        });
+                      },
+                      isInsideContour: isInsideContour,
                     );
                   }),
                 ],
@@ -318,12 +445,16 @@ class DraggableShape extends StatefulWidget {
   final ShapeItem shape;
   final Function(Offset) onDrag;
   final bool Function(Offset) isInsideContour;
+  final List<PlacedShape>? contourShapes;
+  final Contour? contour;
 
   const DraggableShape({
     super.key,
     required this.shape,
     required this.onDrag,
     required this.isInsideContour,
+    this.contourShapes,
+    this.contour,
   });
 
   @override
@@ -331,22 +462,37 @@ class DraggableShape extends StatefulWidget {
 }
 
 class _DraggableShapeState extends State<DraggableShape> {
-  Offset localOffset = Offset.zero;
-
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onPanUpdate: (details) {
-        final newOffset = Offset(
-          widget.shape.position.dx + details.delta.dx,
-          widget.shape.position.dy + details.delta.dy,
-        );
+    return Positioned(
+      left: widget.shape.position.dx,
+      top: widget.shape.position.dy,
+      child: GestureDetector(
+        onPanUpdate: (details) {
+          final newOffset = Offset(
+            widget.shape.position.dx + details.delta.dx,
+            widget.shape.position.dy + details.delta.dy,
+          );
 
-        if (widget.isInsideContour(newOffset)) {
-          widget.onDrag(newOffset);
-        }
-      },
-      child: buildShape(widget.shape.type),
+          final snappedOffset = snapShapePositionToContour(
+            newOffset,
+            widget.contourShapes,
+            contour: widget.contour,
+          );
+
+          final shouldApplySnap = snappedOffset != newOffset || widget.isInsideContour(snappedOffset);
+
+          if (shouldApplySnap) {
+            if (snappedOffset != newOffset) {
+              debugPrint(
+                'Applying snapped position: ${snappedOffset.dx.toStringAsFixed(1)}, ${snappedOffset.dy.toStringAsFixed(1)}',
+              );
+            }
+            widget.onDrag(snappedOffset);
+          }
+        },
+        child: buildShape(widget.shape.type),
+      ),
     );
   }
 
@@ -404,6 +550,28 @@ class _DraggableShapeState extends State<DraggableShape> {
         painter: UniversalTrianglePainter(
           orientation: TriangleOrientation.bottomLeft,
           fillColor: Colors.orange,
+          strokeColor: strokeColor,
+          strokeWidth: strokeWidth,
+        ),
+      );
+
+      case ShapeType.topLeftTriangle:
+        return CustomPaint(
+        size: const Size(90, 90),
+        painter: UniversalTrianglePainter(
+          orientation: TriangleOrientation.topLeft,
+          fillColor: Colors.purple,
+          strokeColor: strokeColor,
+          strokeWidth: strokeWidth,
+        ),
+      );
+
+      case ShapeType.topRightTriangle:
+        return CustomPaint(
+        size: const Size(90, 90),
+        painter: UniversalTrianglePainter(
+          orientation: TriangleOrientation.topRight,
+          fillColor: Colors.grey,
           strokeColor: strokeColor,
           strokeWidth: strokeWidth,
         ),

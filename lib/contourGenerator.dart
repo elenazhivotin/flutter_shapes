@@ -32,7 +32,7 @@ class ContourGenerator {
     Set<String> occupiedCells = {};
 
     // 1. Создаем первую базовую фигуру в верхнем левом углу
-    int currentX = 1;
+    int currentX = 2;
     int currentY = 1;
     placedShapes.add(PlacedShape(type: ShapeType.square, gridX: currentX, gridY: currentY));
     occupiedCells.add("$currentX,$currentY");
@@ -125,11 +125,21 @@ class LevelContourPainter extends CustomPainter {
 
         case ShapeType.rightTriangle:
         case ShapeType.leftTriangle:
+        case ShapeType.topLeftTriangle:
+        case ShapeType.topRightTriangle:
           // Прямоугольные треугольники
-          if (shape.orientation == TriangleOrientation.topLeft) {
+          if (shape.orientation == TriangleOrientation.bottomLeft) {
             path.moveTo(0, 0);
             path.lineTo(shapeSize, 0);
             path.lineTo(0, shapeSize);
+          } else if (shape.orientation == TriangleOrientation.topLeft) {
+            path.moveTo(0, 0);
+            path.lineTo(0, shapeSize);
+            path.lineTo(shapeSize, shapeSize);
+          } else if (shape.orientation == TriangleOrientation.bottomRight) {
+            path.moveTo(0, 0);
+            path.lineTo(shapeSize, 0);
+            path.lineTo(shapeSize, shapeSize);
           } else {
             path.moveTo(0, shapeSize);
             path.lineTo(shapeSize, shapeSize);
