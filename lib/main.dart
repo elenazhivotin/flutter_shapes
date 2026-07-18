@@ -19,7 +19,7 @@ class MyApp extends StatelessWidget {
 
 // ---------------- MODEL ----------------
 
-enum ShapeType { circle, square, triangle, rightTriangle, leftTriangle, topLeftTriangle, topRightTriangle }
+enum ShapeType { circle, square, triangle, invertedTriangle, rightTriangle, leftTriangle, topLeftTriangle, topRightTriangle }
 
 class ShapeItem {
   ShapeType type;
@@ -85,37 +85,62 @@ Offset snapShapePositionToContour(
         shapeSize,
       );
 
-      final candidates = <({double distance, Offset position})>[
+      // Calculate distances to each edge
+      final distLeft = (shapeRect.right - contourRect.left).abs();
+      final distRight = (shapeRect.left - contourRect.right).abs();
+      final distTop = (shapeRect.bottom - contourRect.top).abs();
+      final distBottom = (shapeRect.top - contourRect.bottom).abs();
+
+      // Define all possible snap positions (edges and corners)
+      final snapPositions = [
+        // Corners (both axes change) - prioritize these
         (
-          distance: (shapeRect.right - contourRect.left).abs(),
+          distance: sqrt(distLeft * distLeft + distTop * distTop),
+          position: Offset(contourRect.left - shapeSize, contourRect.top - shapeSize),
+          name: 'top-left corner',
+        ),
+        (
+          distance: sqrt(distRight * distRight + distTop * distTop),
+          position: Offset(contourRect.right, contourRect.top - shapeSize),
+          name: 'top-right corner',
+        ),
+        (
+          distance: sqrt(distLeft * distLeft + distBottom * distBottom),
+          position: Offset(contourRect.left - shapeSize, contourRect.bottom),
+          name: 'bottom-left corner',
+        ),
+        (
+          distance: sqrt(distRight * distRight + distBottom * distBottom),
+          position: Offset(contourRect.right, contourRect.bottom),
+          name: 'bottom-right corner',
+        ),
+        // Edges (single axis change)
+        (
+          distance: distLeft,
           position: Offset(contourRect.left - shapeSize, shapeRect.top),
+          name: 'left edge',
         ),
         (
-          distance: (shapeRect.left - contourRect.right).abs(),
+          distance: distRight,
           position: Offset(contourRect.right, shapeRect.top),
+          name: 'right edge',
         ),
         (
-          distance: (shapeRect.bottom - contourRect.top).abs(),
+          distance: distTop,
           position: Offset(shapeRect.left, contourRect.top - shapeSize),
+          name: 'top edge',
         ),
         (
-          distance: (shapeRect.top - contourRect.bottom).abs(),
+          distance: distBottom,
           position: Offset(shapeRect.left, contourRect.bottom),
+          name: 'bottom edge',
         ),
       ];
 
-      for (final candidate in candidates) {
-        if (candidate.distance <= snapDistance) {
-          debugPrint(
-            'Contour snap candidate: shape=(${position.dx.toStringAsFixed(1)}, ${position.dy.toStringAsFixed(1)}) '
-            'contour=(${contourRect.left.toStringAsFixed(1)}, ${contourRect.top.toStringAsFixed(1)}) '
-            'distance=${candidate.distance.toStringAsFixed(2)} -> ${candidate.position.dx.toStringAsFixed(1)}, ${candidate.position.dy.toStringAsFixed(1)}',
-          );
-        }
-
-        if (candidate.distance <= snapDistance && candidate.distance < bestDistance) {
-          bestDistance = candidate.distance;
-          snappedPosition = candidate.position;
+      for (final snap in snapPositions) {
+        if (snap.distance <= snapDistance && snap.distance < bestDistance) {
+          bestDistance = snap.distance;
+          snappedPosition = snap.position;
         }
       }
     }
@@ -279,16 +304,28 @@ class _ShapeCanvasPageState extends State<ShapeCanvasPage> {
               children: [
   // Стандартные фигуры через иконки
   shapeButton(
-    const Icon(Icons.circle, size: 24), 
+    const Icon(Icons.circle, size: 28), 
     () => addShape(ShapeType.circle),
   ),
   shapeButton(
-    const Icon(Icons.crop_square, size: 24), 
+    const Icon(Icons.crop_square, size: 28), 
     () => addShape(ShapeType.square),
   ),
   shapeButton(
-    const Icon(Icons.change_history, size: 24), 
+    const Icon(Icons.change_history, size: 28), 
     () => addShape(ShapeType.triangle),
+  ),
+
+  shapeButton(
+    CustomPaint(
+      size: const Size(24, 24),
+      painter: InvertedTrianglePainter(
+        fillColor: Colors.transparent,
+        strokeColor: Colors.black,
+        strokeWidth: 2.0,
+      ),
+    ),
+    () => addShape(ShapeType.invertedTriangle),
   ),
   
   shapeButton(
@@ -533,6 +570,12 @@ class _DraggableShapeState extends State<DraggableShape> {
           painter: TrianglePainter(),
         );
 
+      case ShapeType.invertedTriangle:
+        return CustomPaint(
+          size: const Size(90, 90),
+          painter: InvertedTrianglePainter(),
+        );
+
       case ShapeType.rightTriangle:
         return CustomPaint(
           size: const Size(90, 90),
@@ -599,6 +642,41 @@ class TrianglePainter extends CustomPainter {
       ..color = Colors.black
       ..style = PaintingStyle.stroke
       ..strokeWidth = 2.0;
+
+    canvas.drawPath(path, strokePaint);
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+class InvertedTrianglePainter extends CustomPainter {
+  final Color fillColor;
+  final Color strokeColor;
+  final double strokeWidth;
+
+  InvertedTrianglePainter({
+    this.fillColor = Colors.cyan,
+    this.strokeColor = Colors.black,
+    this.strokeWidth = 2.0,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()..color = fillColor;
+
+    final path = Path()
+      ..moveTo(size.width / 2, size.height)
+      ..lineTo(0, 0)
+      ..lineTo(size.width, 0)
+      ..close();
+
+    canvas.drawPath(path, paint);
+
+    final strokePaint = Paint()
+      ..color = strokeColor
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = strokeWidth;
 
     canvas.drawPath(path, strokePaint);
   }

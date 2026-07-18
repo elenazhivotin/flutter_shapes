@@ -123,6 +123,15 @@ class LevelContourPainter extends CustomPainter {
           canvas.drawPath(path, strokePaint);
           break;
 
+        case ShapeType.invertedTriangle:
+          // Перевернутый равнобедренный треугольник
+          path.moveTo(shapeSize / 2, shapeSize);
+          path.lineTo(0, 0);
+          path.lineTo(shapeSize, 0);
+          path.close();
+          canvas.drawPath(path, strokePaint);
+          break;
+
         case ShapeType.rightTriangle:
         case ShapeType.leftTriangle:
         case ShapeType.topLeftTriangle:
@@ -174,7 +183,7 @@ class _GameBoardState extends State<GameBoard> {
   void initState() {
     super.initState();
     // Генерируем уровень, например, из 5 соединенных фигур
-    currentLevel = ContourGenerator().generateLevel(5);
+    currentLevel = ContourGenerator().generateLevel(15);
   }
 
   @override
@@ -195,7 +204,7 @@ class _GameBoardState extends State<GameBoard> {
         onPressed: () {
           setState(() {
             // Перегенерировать уровень при нажатии кнопки
-            currentLevel = ContourGenerator().generateLevel(5);
+            currentLevel = ContourGenerator().generateLevel(15);
           });
         },
         child: const Icon(Icons.refresh),
