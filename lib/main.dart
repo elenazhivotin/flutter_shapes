@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'dart:math';
-import 'package:flutter_shapes/contourGenerator.dart';
+import 'package:flutter_shapes/contour_generator.dart';
+import 'package:flutter_shapes/bubble_animation.dart';
 
 void main() {
   runApp(const MyApp());
@@ -165,13 +166,72 @@ class ShapeCanvasPage extends StatefulWidget {
   State<ShapeCanvasPage> createState() => _ShapeCanvasPageState();
 }
 
-class _ShapeCanvasPageState extends State<ShapeCanvasPage> {
+class _ShapeCanvasPageState extends State<ShapeCanvasPage> with TickerProviderStateMixin {
   final List<ShapeItem> shapes = [];
   List<PlacedShape>? contourShapes;  // For LevelContourPainter
 
   Contour? contour;
   bool isDrawing = false;
   String statusText = "Tap on the canvas to add contour points. Double tap to close the contour.";
+  bool showBubbles = false;
+  late AnimationController _bubbleController;
+
+  final randomCount = 10; //Random().nextInt(8) + 7;  // Random between 7-12
+
+  @override
+  void initState() {
+    super.initState();
+    _bubbleController = AnimationController(
+      duration: const Duration(seconds: 8),
+      vsync: this,
+    );
+  }
+
+  @override
+  void dispose() {
+    _bubbleController.dispose();
+    super.dispose();
+  }
+
+  bool _areAllShapesSnapped() {
+    // Only show bubbles when ALL 10 shapes are in place
+    if (contourShapes == null || contourShapes!.isEmpty) {
+      return false;
+    }
+
+    // Must have exactly randomCount of shapes
+    if (shapes.length != randomCount) {
+      return false;
+    }
+
+    const double shapeSize = 90.0;
+    const double snapTolerance = 10.0;  // Increased tolerance (+=2px) for easier triggering
+
+    // Check if each of the 10 shapes is positioned at one of the contour shape positions
+    for (final shape in shapes) {
+      bool isSnapped = false;
+
+      for (final contourShape in contourShapes!) {
+        final contourPos = Offset(
+          contourShape.gridX * shapeSize,
+          contourShape.gridY * shapeSize,
+        );
+        
+        // Check if shape position matches contour position (with tolerance)
+        final distance = (shape.position - contourPos).distance;
+        if (distance <= snapTolerance) {
+          isSnapped = true;
+          break;
+        }
+      }
+
+      if (!isSnapped) {
+        return false;
+      }
+    }
+
+    return true;
+  }
 
   bool isInsideContour(Offset point) {
     if (contour == null || !contour!.isClosed) return true;
@@ -180,22 +240,23 @@ class _ShapeCanvasPageState extends State<ShapeCanvasPage> {
   }
 
   Offset _nextShapePosition() {
-    if (contour != null && contour!.isClosed) {
-      final candidates = <Offset>[
-        Offset(contour!.boundingBox.left + 40, contour!.boundingBox.top + 40),
-        Offset(contour!.boundingBox.center.dx, contour!.boundingBox.top + 60),
-        Offset(contour!.boundingBox.left + 60, contour!.boundingBox.center.dy),
-        Offset(contour!.boundingBox.center.dx, contour!.boundingBox.center.dy),
-      ];
+    // if (contour != null && contour!.isClosed) {
+    //   final candidates = <Offset>[
+    //     Offset(contour!.boundingBox.left + 40, contour!.boundingBox.top + 40),
+    //     Offset(contour!.boundingBox.center.dx, contour!.boundingBox.top + 60),
+    //     Offset(contour!.boundingBox.left + 60, contour!.boundingBox.center.dy),
+    //     Offset(contour!.boundingBox.center.dx, contour!.boundingBox.center.dy),
+    //   ];
 
-      for (final candidate in candidates) {
-        if (contour!.containsPoint(candidate)) {
-          return candidate;
-        }
-      }
-    }
+    //   for (final candidate in candidates) {
+    //     if (contour!.containsPoint(candidate)) {
+    //       return candidate;
+    //     }
+    //   }
+    // }
 
-    return Offset(60 + shapes.length * 18, 110 + (shapes.length % 4) * 18);
+    // return Offset(60 + shapes.length * 18, 110 + (shapes.length % 4) * 18);
+    return Offset(50 + 1 * 15, 80 + (1 % 4) * 15);
   }
 
   void addShape(ShapeType type) {
@@ -268,7 +329,6 @@ class _ShapeCanvasPageState extends State<ShapeCanvasPage> {
 
   void addCountourTemplate() {
     final generator = ContourGenerator();
-    final randomCount = Random().nextInt(6) + 5;  // Random between 5-10
     final randomShapes = generator.generateLevel(randomCount);
     
     setState(() {
@@ -398,13 +458,13 @@ class _ShapeCanvasPageState extends State<ShapeCanvasPage> {
               child: const Text("Draw Template"),
             ),
           ],),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-            child: Text(
-              statusText,
-              style: const TextStyle(fontSize: 12),
-            ),
-          ),
+          // Padding(
+          //   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+          //   child: Text(
+          //     statusText,
+          //     style: const TextStyle(fontSize: 12),
+          //   ),
+          // ),
           
 
           // 🎨 CANVAS
@@ -446,11 +506,31 @@ class _ShapeCanvasPageState extends State<ShapeCanvasPage> {
                       onDrag: (offset) {
                         setState(() {
                           shape.position = offset;
+                          // Check if all shapes are now snapped
+                          if (_areAllShapesSnapped() && !showBubbles) {
+                            showBubbles = true;
+                            _bubbleController.forward(from: 0.0);
+                            Future.delayed(const Duration(seconds: 8), () {
+                              if (mounted) {
+                                setState(() {
+                                  showBubbles = false;
+                                });
+                              }
+                            });
+                          }
                         });
                       },
                       isInsideContour: isInsideContour,
                     );
                   }),
+
+                  // 🫧 Bubbles animation when all shapes are snapped
+                  if (showBubbles)
+                    IgnorePointer(
+                      child: BubbleAnimationWidget(
+                        animation: _bubbleController,
+                      ),
+                    ),
                 ],
               ),
             ),
