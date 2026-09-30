@@ -20,11 +20,29 @@ class PlacedShape {
   Offset getOffset(double size) => Offset(gridX * size, gridY * size);
 }
 
+double calculateResponsiveShapeSize(
+  Size canvasSize, {
+  double minSize = 40.0,
+  double maxSize = 90.0,
+  double sidePadding = 48.0,
+  double maxColumns = 8.0,
+}) {
+  if (canvasSize.width <= 0) {
+    return maxSize;
+  }
+
+  final availableWidth = canvasSize.width - sidePadding;
+  final candidate = availableWidth / maxColumns;
+  return candidate.clamp(minSize, maxSize);
+}
+
 class ContourGenerator {
-  final double shapeSize = 90.0;
+  final double shapeSize;
   final Random _random = Random();
 
-  // Генерирует массив фигур, которые гарантированно стоят на сетке 90x90
+  ContourGenerator({double? shapeSize}) : shapeSize = shapeSize ?? 90.0;
+
+  // Генерирует массив фигур, которые гарантированно стоят на сетке shapeSize x shapeSize
   List<PlacedShape> generateLevel(int numberOfShapes) {
     List<PlacedShape> placedShapes = [];
     
@@ -81,9 +99,9 @@ class ContourGenerator {
 
 class LevelContourPainter extends CustomPainter {
   final List<PlacedShape> shapes;
-  final double shapeSize = 90.0;
+  final double shapeSize;
 
-  LevelContourPainter(this.shapes);
+  LevelContourPainter(this.shapes, {this.shapeSize = 90.0});
 
   @override
   void paint(Canvas canvas, Size canvasSize) {

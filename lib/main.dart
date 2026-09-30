@@ -193,6 +193,11 @@ class _ShapeCanvasPageState extends State<ShapeCanvasPage> with TickerProviderSt
     super.dispose();
   }
 
+  double _shapeSizeFor(BuildContext context) {
+    final canvasSize = MediaQuery.sizeOf(context);
+    return calculateResponsiveShapeSize(canvasSize);
+  }
+
   bool _areAllShapesSnapped() {
     // Only show bubbles when ALL 10 shapes are in place
     if (contourShapes == null || contourShapes!.isEmpty) {
@@ -204,7 +209,7 @@ class _ShapeCanvasPageState extends State<ShapeCanvasPage> with TickerProviderSt
       return false;
     }
 
-    const double shapeSize = 90.0;
+    final double shapeSize = _shapeSizeFor(context);
     const double snapTolerance = 10.0;  // Increased tolerance (+=2px) for easier triggering
 
     // Check if each of the 10 shapes is positioned at one of the contour shape positions
@@ -328,7 +333,8 @@ class _ShapeCanvasPageState extends State<ShapeCanvasPage> with TickerProviderSt
   }
 
   void addCountourTemplate() {
-    final generator = ContourGenerator();
+    final responsiveShapeSize = _shapeSizeFor(context);
+    final generator = ContourGenerator(shapeSize: responsiveShapeSize);
     final randomShapes = generator.generateLevel(randomCount);
     
     setState(() {
@@ -342,6 +348,8 @@ class _ShapeCanvasPageState extends State<ShapeCanvasPage> with TickerProviderSt
 
   @override
   Widget build(BuildContext context) {
+    final responsiveShapeSize = _shapeSizeFor(context);
+
     return Scaffold(
       appBar: AppBar(title: const Text("Canvas Shapes")),
       body: Column(
@@ -458,14 +466,13 @@ class _ShapeCanvasPageState extends State<ShapeCanvasPage> with TickerProviderSt
               child: const Text("Draw Template"),
             ),
           ],),
-          // Padding(
-          //   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-          //   child: Text(
-          //     statusText,
-          //     style: const TextStyle(fontSize: 12),
-          //   ),
-          // ),
-          
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+            child: Text(
+              statusText,
+              style: const TextStyle(fontSize: 12),
+            ),
+          ),
 
           // 🎨 CANVAS
           Expanded(
@@ -484,7 +491,7 @@ class _ShapeCanvasPageState extends State<ShapeCanvasPage> with TickerProviderSt
                     IgnorePointer(
                       child: CustomPaint(
                         size: Size.infinite,
-                        painter: LevelContourPainter(contourShapes!),
+                        painter: LevelContourPainter(contourShapes!, shapeSize: responsiveShapeSize),
                       ),
                     ),
 
@@ -501,6 +508,7 @@ class _ShapeCanvasPageState extends State<ShapeCanvasPage> with TickerProviderSt
                   ...shapes.map((shape) {
                     return DraggableShape(
                       shape: shape,
+                      shapeSize: responsiveShapeSize,
                       contourShapes: contourShapes,
                       contour: contour,
                       onDrag: (offset) {
@@ -564,6 +572,7 @@ class DraggableShape extends StatefulWidget {
   final bool Function(Offset) isInsideContour;
   final List<PlacedShape>? contourShapes;
   final Contour? contour;
+  final double shapeSize;
 
   const DraggableShape({
     super.key,
@@ -572,6 +581,7 @@ class DraggableShape extends StatefulWidget {
     required this.isInsideContour,
     this.contourShapes,
     this.contour,
+    this.shapeSize = 90.0,
   });
 
   @override
@@ -594,6 +604,7 @@ class _DraggableShapeState extends State<DraggableShape> {
           final snappedOffset = snapShapePositionToContour(
             newOffset,
             widget.contourShapes,
+            shapeSize: widget.shapeSize,
             contour: widget.contour,
           );
 
@@ -620,8 +631,8 @@ class _DraggableShapeState extends State<DraggableShape> {
     switch (type) {
       case ShapeType.circle:
         return Container(
-          width: 90,
-          height: 90,
+          width: widget.shapeSize,
+          height: widget.shapeSize,
           decoration: const BoxDecoration(
             color: Colors.blue,
             shape: BoxShape.circle,
@@ -634,8 +645,8 @@ class _DraggableShapeState extends State<DraggableShape> {
 
       case ShapeType.square:
         return Container(
-          width: 90,
-          height: 90,
+          width: widget.shapeSize,
+          height: widget.shapeSize,
           decoration: const BoxDecoration(
             color: Colors.red,
             border: Border.fromBorderSide(
@@ -646,19 +657,19 @@ class _DraggableShapeState extends State<DraggableShape> {
 
       case ShapeType.triangle:
         return CustomPaint(
-          size: const Size(90, 90),
+          size: Size(widget.shapeSize, widget.shapeSize),
           painter: TrianglePainter(),
         );
 
       case ShapeType.invertedTriangle:
         return CustomPaint(
-          size: const Size(90, 90),
+          size: Size(widget.shapeSize, widget.shapeSize),
           painter: InvertedTrianglePainter(),
         );
 
       case ShapeType.rightTriangle:
         return CustomPaint(
-          size: const Size(90, 90),
+          size: Size(widget.shapeSize, widget.shapeSize),
           painter: UniversalTrianglePainter(
             orientation: TriangleOrientation.bottomRight,
             fillColor: Colors.yellow,
@@ -669,7 +680,7 @@ class _DraggableShapeState extends State<DraggableShape> {
 
       case ShapeType.leftTriangle:
         return CustomPaint(
-        size: const Size(90, 90),
+        size: Size(widget.shapeSize, widget.shapeSize),
         painter: UniversalTrianglePainter(
           orientation: TriangleOrientation.bottomLeft,
           fillColor: Colors.orange,
@@ -680,7 +691,7 @@ class _DraggableShapeState extends State<DraggableShape> {
 
       case ShapeType.topLeftTriangle:
         return CustomPaint(
-        size: const Size(90, 90),
+        size: Size(widget.shapeSize, widget.shapeSize),
         painter: UniversalTrianglePainter(
           orientation: TriangleOrientation.topLeft,
           fillColor: Colors.purple,
@@ -691,7 +702,7 @@ class _DraggableShapeState extends State<DraggableShape> {
 
       case ShapeType.topRightTriangle:
         return CustomPaint(
-        size: const Size(90, 90),
+        size: Size(widget.shapeSize, widget.shapeSize),
         painter: UniversalTrianglePainter(
           orientation: TriangleOrientation.topRight,
           fillColor: Colors.grey,
