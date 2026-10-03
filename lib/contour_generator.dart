@@ -16,16 +16,17 @@ class PlacedShape {
     this.orientation,
   });
 
-  // Перевод координат сетки в пиксели (размер 90)
-  Offset getOffset(double size) => Offset(gridX * size, gridY * size);
+  // Перевод координат сетки в пиксели с учётом экранного смещения
+  Offset getOffset(double size, {double originX = 0.0, double originY = 0.0}) =>
+      Offset(originX + gridX * size, originY + gridY * size);
 }
 
 double calculateResponsiveShapeSize(
   Size canvasSize, {
-  double minSize = 40.0,
+  double minSize = 58.0,
   double maxSize = 90.0,
   double sidePadding = 48.0,
-  double maxColumns = 8.0,
+  int maxColumns = 4,
 }) {
   if (canvasSize.width <= 0) {
     return maxSize;
@@ -34,6 +35,20 @@ double calculateResponsiveShapeSize(
   final availableWidth = canvasSize.width - sidePadding;
   final candidate = availableWidth / maxColumns;
   return candidate.clamp(minSize, maxSize);
+}
+
+Offset calculateContourOrigin(
+  Size canvasSize, {
+  required double shapeSize,
+  double leftPadding = 10.0,
+  double topPadding = 0.0,
+  int columns = 4,
+}) {
+  final left = leftPadding;
+  final top = (1.5 * shapeSize) + topPadding;
+
+  final maxLeft = max(0.0, canvasSize.width - (columns * shapeSize) - leftPadding);
+  return Offset(left.clamp(0.0, maxLeft), top);
 }
 
 class ContourGenerator {
@@ -100,8 +115,9 @@ class ContourGenerator {
 class LevelContourPainter extends CustomPainter {
   final List<PlacedShape> shapes;
   final double shapeSize;
+  final Offset origin;
 
-  LevelContourPainter(this.shapes, {this.shapeSize = 90.0});
+  LevelContourPainter(this.shapes, {this.shapeSize = 90.0, this.origin = Offset.zero});
 
   @override
   void paint(Canvas canvas, Size canvasSize) {
@@ -110,9 +126,11 @@ class LevelContourPainter extends CustomPainter {
       ..style = PaintingStyle.stroke
       ..strokeWidth = 2.0;
 
+    final effectiveOrigin = origin == Offset.zero ? calculateContourOrigin(canvasSize, shapeSize: shapeSize) : origin;
+
     for (var shape in shapes) {
       // Получаем пиксельные координаты левого верхнего угла ячейки
-      Offset offset = shape.getOffset(shapeSize);
+      Offset offset = shape.getOffset(shapeSize, originX: effectiveOrigin.dx, originY: effectiveOrigin.dy);
       
       canvas.save();
       // Сдвигаем холст в нужную точку сетки

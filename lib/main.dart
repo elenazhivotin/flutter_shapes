@@ -34,6 +34,8 @@ Offset snapShapePositionToContour(
   List<PlacedShape>? contourShapes, {
   double shapeSize = 90.0,
   double snapDistance = 5.0,
+  double originX = 0.0,
+  double originY = 0.0,
   Contour? contour,
 }) {
   if (contourShapes == null || contourShapes.isEmpty) {
@@ -80,8 +82,8 @@ Offset snapShapePositionToContour(
   if (contourShapes != null && contourShapes.isNotEmpty) {
     for (final contourShape in contourShapes) {
       final contourRect = Rect.fromLTWH(
-        contourShape.gridX * shapeSize,
-        contourShape.gridY * shapeSize,
+        originX + contourShape.gridX * shapeSize,
+        originY + contourShape.gridY * shapeSize,
         shapeSize,
         shapeSize,
       );
@@ -198,6 +200,12 @@ class _ShapeCanvasPageState extends State<ShapeCanvasPage> with TickerProviderSt
     return calculateResponsiveShapeSize(canvasSize);
   }
 
+  Offset _contourOriginFor(BuildContext context) {
+    final canvasSize = MediaQuery.sizeOf(context);
+    final shapeSize = _shapeSizeFor(context);
+    return calculateContourOrigin(canvasSize, shapeSize: shapeSize);
+  }
+
   bool _areAllShapesSnapped() {
     // Only show bubbles when ALL 10 shapes are in place
     if (contourShapes == null || contourShapes!.isEmpty) {
@@ -210,6 +218,7 @@ class _ShapeCanvasPageState extends State<ShapeCanvasPage> with TickerProviderSt
     }
 
     final double shapeSize = _shapeSizeFor(context);
+    final origin = _contourOriginFor(context);
     const double snapTolerance = 10.0;  // Increased tolerance (+=2px) for easier triggering
 
     // Check if each of the 10 shapes is positioned at one of the contour shape positions
@@ -218,8 +227,8 @@ class _ShapeCanvasPageState extends State<ShapeCanvasPage> with TickerProviderSt
 
       for (final contourShape in contourShapes!) {
         final contourPos = Offset(
-          contourShape.gridX * shapeSize,
-          contourShape.gridY * shapeSize,
+          origin.dx + contourShape.gridX * shapeSize,
+          origin.dy + contourShape.gridY * shapeSize,
         );
         
         // Check if shape position matches contour position (with tolerance)
@@ -245,23 +254,7 @@ class _ShapeCanvasPageState extends State<ShapeCanvasPage> with TickerProviderSt
   }
 
   Offset _nextShapePosition() {
-    // if (contour != null && contour!.isClosed) {
-    //   final candidates = <Offset>[
-    //     Offset(contour!.boundingBox.left + 40, contour!.boundingBox.top + 40),
-    //     Offset(contour!.boundingBox.center.dx, contour!.boundingBox.top + 60),
-    //     Offset(contour!.boundingBox.left + 60, contour!.boundingBox.center.dy),
-    //     Offset(contour!.boundingBox.center.dx, contour!.boundingBox.center.dy),
-    //   ];
-
-    //   for (final candidate in candidates) {
-    //     if (contour!.containsPoint(candidate)) {
-    //       return candidate;
-    //     }
-    //   }
-    // }
-
-    // return Offset(60 + shapes.length * 18, 110 + (shapes.length % 4) * 18);
-    return Offset(50 + 1 * 15, 80 + (1 % 4) * 15);
+    return const Offset(10, 10);
   }
 
   void addShape(ShapeType type) {
@@ -349,6 +342,7 @@ class _ShapeCanvasPageState extends State<ShapeCanvasPage> with TickerProviderSt
   @override
   Widget build(BuildContext context) {
     final responsiveShapeSize = _shapeSizeFor(context);
+    final contourOrigin = _contourOriginFor(context);
 
     return Scaffold(
       appBar: AppBar(title: const Text("Canvas Shapes")),
@@ -491,7 +485,11 @@ class _ShapeCanvasPageState extends State<ShapeCanvasPage> with TickerProviderSt
                     IgnorePointer(
                       child: CustomPaint(
                         size: Size.infinite,
-                        painter: LevelContourPainter(contourShapes!, shapeSize: responsiveShapeSize),
+                        painter: LevelContourPainter(
+                          contourShapes!,
+                          shapeSize: responsiveShapeSize,
+                          origin: contourOrigin,
+                        ),
                       ),
                     ),
 
@@ -509,6 +507,8 @@ class _ShapeCanvasPageState extends State<ShapeCanvasPage> with TickerProviderSt
                     return DraggableShape(
                       shape: shape,
                       shapeSize: responsiveShapeSize,
+                      originX: contourOrigin.dx,
+                      originY: contourOrigin.dy,
                       contourShapes: contourShapes,
                       contour: contour,
                       onDrag: (offset) {
@@ -573,6 +573,8 @@ class DraggableShape extends StatefulWidget {
   final List<PlacedShape>? contourShapes;
   final Contour? contour;
   final double shapeSize;
+  final double originX;
+  final double originY;
 
   const DraggableShape({
     super.key,
@@ -582,6 +584,8 @@ class DraggableShape extends StatefulWidget {
     this.contourShapes,
     this.contour,
     this.shapeSize = 90.0,
+    this.originX = 0.0,
+    this.originY = 0.0,
   });
 
   @override
@@ -605,6 +609,8 @@ class _DraggableShapeState extends State<DraggableShape> {
             newOffset,
             widget.contourShapes,
             shapeSize: widget.shapeSize,
+            originX: widget.originX,
+            originY: widget.originY,
             contour: widget.contour,
           );
 
